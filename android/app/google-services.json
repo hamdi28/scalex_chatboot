@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "579291563653",
+    "project_id": "scalex-182fa",
+    "storage_bucket": "scalex-182fa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:579291563653:android:1193a05e65710cd9920bec",
+        "android_client_info": {
+          "package_name": "com.scalex.chatbot"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGT7D6lVmKHYGfXDJNMjeGZu9Hq6ns3cA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
