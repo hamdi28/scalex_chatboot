@@ -179,7 +179,7 @@ class AIService {
         'email': email,
         'userMessage': userMessage,
         'aiResponse': aiResponse,
-        'model': 'deepseek', // Changed from 'groq' to 'deepseek'
+        'model': 'gemini', // Changed from 'deepseek' to 'gemini'
         'language': language,
       });
       return true;
@@ -206,25 +206,25 @@ class AIService {
     return {
       'available_models': [
         {
-          'id': 'deepseek', // Replaced 'groq' with 'deepseek'
-          'name': 'DeepSeek (Free)',
+          'id': 'gemini', // Replaced 'deepseek' with 'gemini'
+          'name': 'Google Gemini (Free)',
           'status': 'available',
-          'description': 'Completely free AI model with 128K context window'
-        },
-        {
-          'id': 'claude',
-          'name': 'Claude AI',
-          'status': 'available',
-          'description': 'Thoughtful and detailed responses'
+          'description': 'Free tier - 60 requests per minute'
         },
         {
           'id': 'groq',
           'name': 'Groq (Llama 3.1)',
           'status': 'available',
           'description': 'Fast and efficient AI model'
+        },
+        {
+          'id': 'claude',
+          'name': 'Claude AI',
+          'status': 'available',
+          'description': 'Thoughtful and detailed responses'
         }
       ],
-      'default': 'deepseek' // Changed default from 'groq' to 'deepseek'
+      'default': 'gemini' // Changed default from 'deepseek' to 'gemini'
     };
   }
 
@@ -240,7 +240,7 @@ class AIService {
         return 'SSL certificate error.';
       case DioExceptionType.badResponse:
         if (e.response?.statusCode == 401) {
-          return 'API key error. Please check your DeepSeek API configuration.'; // Updated message
+          return 'API key error. Please check your AI service configuration.'; // Updated to generic message
         }
         if (e.response?.statusCode == 429) {
           return 'Rate limit exceeded. Please try again later.';

@@ -56,12 +56,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   ),
                   DropdownMenuItem(
-                    value: AIModel.deepseek,  // Replaced grok with deepseek
+                    value: AIModel.gemini,  // Replaced grok with deepseek
                     child: Row(
                       children: [
                         const Icon(Icons.smart_toy, size: 16),
                         const SizedBox(width: 8),
-                        Text('ai_models.deepseek'.tr()),  // Updated translation key
+                        Text('ai_models.gimini'.tr()),  // Updated translation key
                       ],
                     ),
                   ),
