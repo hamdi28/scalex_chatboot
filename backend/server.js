@@ -297,138 +297,131 @@ app.post('/api/history', (req, res) => {
 
 
 
+// ============== UPDATED SUMMARY ENDPOINT ==============
+// Place this in your server.js, replacing the existing /api/summary endpoint
+
+// Get user summary (AI-generated based on selected model)
 app.post('/api/summary', async (req, res) => {
   try {
-    // Validate request body
-    const { email, messages, model } = req.body;
+    console.log(`📊 Summary request received`);
+    const { email, messages, model = 'groq' } = req.body;
 
+    // Validate input
     if (!email && !messages) {
       return res.status(400).json({
-        error: 'Either email or messages array is required',
-        code: 'INVALID_REQUEST',
+        error: 'Either email or messages array is required'
       });
-    }
-
-    // Validate model if provided
-    const validModels = ['groq', 'openai'];
-    let usedModel = model ? model.toLowerCase() : 'groq'; // Default to Groq
-    if (model && !validModels.includes(usedModel)) {
-      console.warn(`Invalid model specified: ${model}. Defaulting to Groq.`);
-      usedModel = 'groq';
     }
 
     let chatMessages = messages;
 
-    // If email provided, fetch messages from history
+    // If email provided, get messages from history
     if (email && !messages) {
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({
-          error: 'Invalid email format',
-          code: 'INVALID_EMAIL',
-        });
-      }
-
       if (!users.has(email)) {
-        return res.status(404).json({
-          error: 'User not found',
-          code: 'USER_NOT_FOUND',
-        });
+        return res.status(404).json({ error: 'User not found' });
       }
-
       const history = chatHistories.get(email) || [];
-      chatMessages = history.map(entry => {
-        if (!entry.userMessage || !entry.aiResponse) {
-          console.warn(`Invalid history entry for ${email}:`, entry);
-          return '';
-        }
-        return `${entry.userMessage} -> ${entry.aiResponse}`;
-      }).filter(msg => msg); // Remove invalid entries
+      chatMessages = history.map(entry => entry.userMessage);
     }
 
-    // Validate messages
+    // Check if there are messages
     if (!chatMessages || !Array.isArray(chatMessages) || chatMessages.length === 0) {
-      return res.status(200).json({
+      return res.json({
         summary: 'No chat history available yet.',
         messageCount: 0,
-        generatedAt: new Date().toISOString(),
-        model: usedModel,
+        model: model
       });
     }
 
-    // Limit messages to prevent excessive processing
-    const maxMessages = 20;
-    const recentMessages = chatMessages.slice(-maxMessages).map(m => {
-      try {
-        return typeof m === 'string' ? m : JSON.stringify(m);
-      } catch (e) {
-        console.warn('Failed to stringify message:', m);
-        return '';
-      }
-    }).filter(m => m); // Remove invalid messages
+    console.log(`📝 Generating summary using ${model} for ${chatMessages.length} messages`);
 
-    if (recentMessages.length === 0) {
-      return res.status(200).json({
-        summary: 'No valid messages to summarize.',
-        messageCount: chatMessages.length,
-        generatedAt: new Date().toISOString(),
-        model: usedModel,
-      });
-    }
+    // Prepare messages for analysis (last 20 messages)
+    const recentMessages = chatMessages.slice(-20).map(m =>
+      typeof m === 'string' ? m : JSON.stringify(m)
+    ).join('\n');
 
-    // Generate summary prompt
-    const summaryPrompt = `Analyze these user messages and provide a brief, friendly summary of their interests and common topics in 2-3 sentences. Be concise and insightful.\n\nMessages:\n${recentMessages.join('\n')}`;
+    // Create summary prompt
+    const summaryPrompt = `Analyze these user messages and provide a brief, friendly summary of their interests and common topics in 2-3 sentences. Be concise, insightful, and positive. Focus on patterns, recurring themes, and main areas of interest.
+
+Messages:
+${recentMessages}`;
 
     let summary;
+    const startTime = Date.now();
+
+    // Generate summary using the selected AI model
     try {
-      if (usedModel === 'groq') {
-        summary = await callGroq(summaryPrompt, 'en');
-      } else {
-        summary = await callOpenAI(summaryPrompt, 'en');
+      switch (model.toLowerCase()) {
+        case 'gpt':
+          summary = await callOpenAI(summaryPrompt, 'en');
+          break;
+        case 'claude':
+          summary = await callClaude(summaryPrompt, 'en');
+          break;
+        case 'groq':
+          summary = await callGroq(summaryPrompt, 'en');
+          break;
+        case 'grok':
+          summary = await callGrok(summaryPrompt, 'en');
+          break;
+        default:
+          // Default to Groq if model not recognized
+          summary = await callGroq(summaryPrompt, 'en');
       }
-    } catch (aiError) {
-      console.error(`AI (${usedModel}) call failed:`, aiError.message);
-      // Fallback to the other model
-      usedModel = usedModel === 'groq' ? 'openai' : 'groq';
+    } catch (modelError) {
+      console.error(`❌ ${model} failed, trying fallback...`);
+      // Fallback chain: Groq -> OpenAI -> Mock
       try {
-        summary = await (usedModel === 'groq' ? callGroq : callOpenAI)(summaryPrompt, 'en');
+        if (model.toLowerCase() !== 'groq') {
+          summary = await callGroq(summaryPrompt, 'en');
+        } else if (process.env.OPENAI_API_KEY) {
+          summary = await callOpenAI(summaryPrompt, 'en');
+        } else {
+          throw new Error('All AI services unavailable');
+        }
       } catch (fallbackError) {
-        console.error(`Fallback AI (${usedModel}) call failed:`, fallbackError.message);
-        return res.status(503).json({
-          error: 'Failed to generate summary due to AI service unavailability',
-          code: 'AI_SERVICE_ERROR',
-        });
+        // Generate a simple mock summary
+        summary = generateMockSummary(chatMessages);
       }
     }
 
-    // Validate summary output
-    if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
-      console.warn('Invalid or empty summary received:', summary);
-      summary = 'Unable to generate a meaningful summary.';
-    }
+    const responseTime = Date.now() - startTime;
 
-    // Success response
-    return res.status(200).json({
-      summary: summary.trim(),
+    console.log(`✅ Summary generated successfully in ${responseTime}ms`);
+
+    res.json({
+      summary,
       messageCount: chatMessages.length,
       generatedAt: new Date().toISOString(),
-      model: usedModel,
+      model: model,
+      responseTime: `${responseTime}ms`
     });
 
   } catch (error) {
-    // Generic error handler
-    console.error('Unexpected error in /api/summary:', {
-      message: error.message,
-      stack: error.stack,
-    });
-
-    return res.status(500).json({
-      error: 'Internal server error',
-      code: 'INTERNAL_SERVER_ERROR',
+    console.error('❌ Summary generation error:', error);
+    res.status(500).json({
+      error: 'Failed to generate summary',
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Try again later.'
     });
   }
 });
+
+// Helper function to generate a basic mock summary
+function generateMockSummary(messages) {
+  const messageCount = messages.length;
+  const avgLength = messages.reduce((sum, msg) => sum + msg.length, 0) / messageCount;
+
+  // Simple keyword extraction
+  const allText = messages.join(' ').toLowerCase();
+  const keywords = ['ai', 'code', 'help', 'how', 'what', 'learn', 'app', 'data', 'work'];
+  const foundKeywords = keywords.filter(kw => allText.includes(kw)).slice(0, 3);
+
+  if (foundKeywords.length > 0) {
+    return `Based on ${messageCount} messages, you've shown interest in topics related to ${foundKeywords.join(', ')}. Your messages average ${Math.round(avgLength)} characters, suggesting ${avgLength > 100 ? 'detailed' : 'concise'} communication style. You actively engage with various topics and seek information.`;
+  }
+
+  return `You've sent ${messageCount} messages with an average length of ${Math.round(avgLength)} characters. Your conversations cover various topics and you demonstrate active engagement with the AI assistant.`;
+}
 
 // Error handling middleware for uncaught errors
 app.use((err, req, res, next) => {
