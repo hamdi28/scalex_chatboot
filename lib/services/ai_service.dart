@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-enum AIModel {claude, grok, groq }
+import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:scalex_chatbot/features/profile/data/providers/ai_model_provider.dart';
 
 class AIService {
   final Dio _dio;
@@ -35,7 +37,11 @@ class AIService {
 
     try {
       final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
-      final requestData = {'message': message, 'model': model.name, 'language': language};
+      final requestData = {
+        'message': message,
+        'model': model.name,
+        'language': language
+      };
 
       final stopwatch = Stopwatch()..start();
       final response = await _dio.post('$baseUrl/chat', data: requestData);
@@ -55,7 +61,6 @@ class AIService {
 
       print('🎯 Final result: "$result"');
       return result;
-
     } on DioException catch (e) {
       return handleDioError(e);
     } catch (e) {
@@ -66,10 +71,62 @@ class AIService {
     }
   }
 
+  // NEW: Get user summary with selected AI model
+  Future<String> getUserSummary({
+    required List<String> messages,
+    required AIModel model,
+  }) async {
+    print('\n🎯 ========== GENERATING USER SUMMARY ==========');
+    print('📊 Messages count: ${messages.length}');
+    print('🤖 Using model: ${model.name}');
+
+    if (messages.isEmpty) {
+      return 'No messages to analyze.';
+    }
+
+    try {
+      final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
+
+      final requestData = {
+        'messages': messages,
+        'model': model.name, // Send the selected model
+      };
+
+      print('📤 Sending request to: $baseUrl/summary');
+
+      final response = await _dio.post(
+        '$baseUrl/summary',
+        data: requestData,
+      );
+
+      print('📥 Response received: ${response.statusCode}');
+
+      if (response.data is Map) {
+        final summary = response.data['summary'] ?? 'Unable to generate summary.';
+        print('✅ Summary generated successfully');
+        return summary;
+      } else {
+        print('⚠️ Unexpected response format');
+        return 'Unable to generate summary at this time.';
+      }
+    } on DioException catch (e) {
+      print('❌ DioException: ${e.message}');
+      throw Exception(handleDioError(e));
+    } catch (e) {
+      print('❌ Unexpected error: $e');
+      throw Exception('Failed to generate summary: $e');
+    } finally {
+      print('🔚 Summary generation completed\n');
+    }
+  }
+
   Future<bool> testConnection() async {
     try {
       final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
-      final response = await _dio.get('$baseUrl/health', options: Options(receiveTimeout: const Duration(seconds: 10)));
+      final response = await _dio.get(
+        '$baseUrl/health',
+        options: Options(receiveTimeout: const Duration(seconds: 10)),
+      );
       return true;
     } on DioException catch (_) {
       return false;
@@ -87,7 +144,10 @@ class AIService {
 
     try {
       final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
-      final response = await _dio.post('$baseUrl/translate', data: {'text': text, 'from': fromLang, 'to': toLang});
+      final response = await _dio.post(
+        '$baseUrl/translate',
+        data: {'text': text, 'from': fromLang, 'to': toLang},
+      );
       return response.data['translated_text'] ?? response.data['translation'] ?? text;
     } catch (_) {
       return text;
@@ -98,7 +158,9 @@ class AIService {
     try {
       final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
       final response = await _dio.get('$baseUrl/history/$email');
-      if (response.data is Map && response.data['history'] is List) return response.data['history'];
+      if (response.data is Map && response.data['history'] is List) {
+        return response.data['history'];
+      }
       return [];
     } catch (_) {
       return [];
@@ -117,7 +179,7 @@ class AIService {
         'email': email,
         'userMessage': userMessage,
         'aiResponse': aiResponse,
-        'model': 'groq',
+        'model': 'deepseek', // Changed from 'groq' to 'deepseek'
         'language': language,
       });
       return true;
@@ -132,16 +194,37 @@ class AIService {
       final response = await _dio.get('$baseUrl/health');
       return response.data is Map ? response.data : {'status': 'unknown'};
     } catch (e) {
-      return {'status': 'error', 'message': 'Cannot connect to server', 'error': e.toString()};
+      return {
+        'status': 'error',
+        'message': 'Cannot connect to server',
+        'error': e.toString()
+      };
     }
   }
 
   Future<Map<String, dynamic>> getAvailableModels() async {
     return {
       'available_models': [
-        {'id': 'groq', 'name': 'Groq (Llama 3.1)', 'status': 'available', 'description': 'Fast and efficient AI model'}
+        {
+          'id': 'deepseek', // Replaced 'groq' with 'deepseek'
+          'name': 'DeepSeek (Free)',
+          'status': 'available',
+          'description': 'Completely free AI model with 128K context window'
+        },
+        {
+          'id': 'claude',
+          'name': 'Claude AI',
+          'status': 'available',
+          'description': 'Thoughtful and detailed responses'
+        },
+        {
+          'id': 'groq',
+          'name': 'Groq (Llama 3.1)',
+          'status': 'available',
+          'description': 'Fast and efficient AI model'
+        }
       ],
-      'default': 'groq'
+      'default': 'deepseek' // Changed default from 'groq' to 'deepseek'
     };
   }
 
@@ -156,9 +239,15 @@ class AIService {
       case DioExceptionType.badCertificate:
         return 'SSL certificate error.';
       case DioExceptionType.badResponse:
-        if (e.response?.statusCode == 401) return 'API key error. Please check your Groq API key.';
-        if (e.response?.statusCode == 429) return 'Rate limit exceeded. Please try again later.';
-        if (e.response?.statusCode == 500) return 'The server failed to fulfill an apparently valid request.';
+        if (e.response?.statusCode == 401) {
+          return 'API key error. Please check your DeepSeek API configuration.'; // Updated message
+        }
+        if (e.response?.statusCode == 429) {
+          return 'Rate limit exceeded. Please try again later.';
+        }
+        if (e.response?.statusCode == 500) {
+          return 'The server failed to fulfill an apparently valid request.';
+        }
         return 'Server error (${e.response?.statusCode}): ${e.response?.data}';
       case DioExceptionType.cancel:
         return 'Request was cancelled.';

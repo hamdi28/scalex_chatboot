@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import 'package:scalex_chatbot/features/profile/data/providers/ai_model_provider.dart';
 import '../../data/models/message.dart';
 import '../../../../services/ai_service.dart';
 import '../../../../services/database_service.dart';

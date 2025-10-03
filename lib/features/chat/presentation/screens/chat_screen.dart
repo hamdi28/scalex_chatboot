@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:scalex_chatbot/features/chat/data/models/message.dart';
+import 'package:scalex_chatbot/features/profile/data/providers/ai_model_provider.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/message_bubble.dart';
 import '../../../../services/ai_service.dart';
@@ -55,12 +56,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   ),
                   DropdownMenuItem(
-                    value: AIModel.grok,
+                    value: AIModel.deepseek,  // Replaced grok with deepseek
                     child: Row(
                       children: [
-                        const Icon(Icons.science, size: 16),
+                        const Icon(Icons.smart_toy, size: 16),
                         const SizedBox(width: 8),
-                        Text('ai_models.grok'.tr()),
+                        Text('ai_models.deepseek'.tr()),  // Updated translation key
                       ],
                     ),
                   ),
@@ -68,7 +69,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     value: AIModel.groq,
                     child: Row(
                       children: [
-                        const Icon(Icons.smart_toy, size: 16),
+                        const Icon(Icons.science, size: 16),
                         const SizedBox(width: 8),
                         Text('ai_models.groq'.tr()),
                       ],

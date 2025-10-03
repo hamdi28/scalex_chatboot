@@ -12,11 +12,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart'; // For .tr()
 import 'package:intl/intl.dart'; // For DateFormat
 
-class ProfileScreen extends ConsumerWidget {
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'dart:ui' as ui;
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../chat/presentation/providers/chat_provider.dart';
+import '../../data/providers/user_summary_provider.dart';
+
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  String? _generatedSummary;
+  bool _isGenerating = false;
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).value;
     final chatState = ref.watch(chatProvider);
     final isRTL = context.locale.languageCode == 'ar';
@@ -79,6 +95,19 @@ class ProfileScreen extends ConsumerWidget {
               ),
 
               const SizedBox(height: 24),
+
+              // AI-Generated Summary Section
+              Text(
+                'user_summary'.tr(),
+                key: const ValueKey('summary_title'),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+
+              _buildUserSummaryCard(chatState, isRTL),
+
+              const SizedBox(height: 24),
+
               // Settings Section
               Text(
                 'settings'.tr(),
@@ -213,6 +242,159 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildUserSummaryCard(ChatState chatState, bool isRTL) {
+    final userMessagesCount = chatState.messages.where((m) => m.isUser).length;
+
+    if (userMessagesCount == 0) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Icon(
+                Icons.psychology_outlined,
+                size: 48,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isRTL
+                    ? 'لا توجد رسائل كافية لإنشاء ملخص'
+                    : 'Not enough messages to generate a summary',
+                style: Theme.of(context).textTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.psychology, color: Theme.of(context).primaryColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'ai_analysis'.tr(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            if (_generatedSummary == null && !_isGenerating)
+              Center(
+                child: ElevatedButton.icon(
+                  onPressed: () => _generateSummary(),
+                  icon: const Icon(Icons.auto_awesome),
+                  label: Text(isRTL ? 'إنشاء الملخص' : 'Generate Summary'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ),
+
+            if (_isGenerating)
+              Center(
+                child: Column(
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 12),
+                    Text(
+                      isRTL ? 'جاري إنشاء الملخص...' : 'Generating summary...',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+
+            if (_generatedSummary != null && !_isGenerating)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _generatedSummary!,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isRTL
+                            ? 'بناءً على $userMessagesCount رسالة'
+                            : 'Based on $userMessagesCount messages',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _generateSummary(),
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: Text(isRTL ? 'تحديث' : 'Refresh'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generateSummary() async {
+    setState(() {
+      _isGenerating = true;
+    });
+
+    try {
+      final chatState = ref.read(chatProvider);
+      final userMessages = chatState.messages
+          .where((m) => m.isUser && m.aiModel == chatState.selectedModel.name)
+          .map((m) => m.content)
+          .toList();
+
+      final selectedModel = chatState.selectedModel;
+      final summary = await ref.read(userSummaryProvider((userMessages, selectedModel)).future);
+
+      if (mounted) {
+        setState(() {
+          _generatedSummary = summary;
+          _isGenerating = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _generatedSummary = context.locale.languageCode == 'ar'
+              ? 'حدث خطأ أثناء إنشاء الملخص'
+              : 'Error generating summary';
+          _isGenerating = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _showExportDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -284,6 +466,9 @@ class ProfileScreen extends ConsumerWidget {
               await ref.read(chatProvider.notifier).clearHistory();
               if (context.mounted) {
                 Navigator.pop(context);
+                setState(() {
+                  _generatedSummary = null; // Clear summary when history is cleared
+                });
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(context.locale.languageCode == 'ar'
