@@ -295,55 +295,153 @@ app.post('/api/history', (req, res) => {
   }
 });
 
-// Get user summary (AI-generated)
+
+
 app.post('/api/summary', async (req, res) => {
   try {
-    const { email, messages } = req.body;
+    // Validate request body
+    const { email, messages, model } = req.body;
 
     if (!email && !messages) {
-      return res.status(400).json({ error: 'Either email or messages array is required' });
+      return res.status(400).json({
+        error: 'Either email or messages array is required',
+        code: 'INVALID_REQUEST',
+      });
+    }
+
+    // Validate model if provided
+    const validModels = ['groq', 'openai'];
+    let usedModel = model ? model.toLowerCase() : 'groq'; // Default to Groq
+    if (model && !validModels.includes(usedModel)) {
+      console.warn(`Invalid model specified: ${model}. Defaulting to Groq.`);
+      usedModel = 'groq';
     }
 
     let chatMessages = messages;
 
-    // If email provided, get messages from history
+    // If email provided, fetch messages from history
     if (email && !messages) {
-      if (!users.has(email)) {
-        return res.status(404).json({ error: 'User not found' });
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          error: 'Invalid email format',
+          code: 'INVALID_EMAIL',
+        });
       }
+
+      if (!users.has(email)) {
+        return res.status(404).json({
+          error: 'User not found',
+          code: 'USER_NOT_FOUND',
+        });
+      }
+
       const history = chatHistories.get(email) || [];
-      chatMessages = history.map(entry => `${entry.userMessage} -> ${entry.aiResponse}`);
+      chatMessages = history.map(entry => {
+        if (!entry.userMessage || !entry.aiResponse) {
+          console.warn(`Invalid history entry for ${email}:`, entry);
+          return '';
+        }
+        return `${entry.userMessage} -> ${entry.aiResponse}`;
+      }).filter(msg => msg); // Remove invalid entries
     }
 
+    // Validate messages
     if (!chatMessages || !Array.isArray(chatMessages) || chatMessages.length === 0) {
-      return res.json({
+      return res.status(200).json({
         summary: 'No chat history available yet.',
-        messageCount: 0
+        messageCount: 0,
+        generatedAt: new Date().toISOString(),
+        model: usedModel,
       });
     }
 
-    // Generate summary using AI (prefer Groq for speed)
-    const recentMessages = chatMessages.slice(-20).map(m => typeof m === 'string' ? m : JSON.stringify(m)).join('\n');
-    const summaryPrompt = `Analyze these user messages and provide a brief, friendly summary of their interests and common topics in 2-3 sentences. Be concise and insightful.\n\nMessages:\n${recentMessages}`;
+    // Limit messages to prevent excessive processing
+    const maxMessages = 20;
+    const recentMessages = chatMessages.slice(-maxMessages).map(m => {
+      try {
+        return typeof m === 'string' ? m : JSON.stringify(m);
+      } catch (e) {
+        console.warn('Failed to stringify message:', m);
+        return '';
+      }
+    }).filter(m => m); // Remove invalid messages
+
+    if (recentMessages.length === 0) {
+      return res.status(200).json({
+        summary: 'No valid messages to summarize.',
+        messageCount: chatMessages.length,
+        generatedAt: new Date().toISOString(),
+        model: usedModel,
+      });
+    }
+
+    // Generate summary prompt
+    const summaryPrompt = `Analyze these user messages and provide a brief, friendly summary of their interests and common topics in 2-3 sentences. Be concise and insightful.\n\nMessages:\n${recentMessages.join('\n')}`;
 
     let summary;
     try {
-      summary = await callGroq(summaryPrompt, 'en');
-    } catch (error) {
-      // Fallback to OpenAI if Groq fails
-      summary = await callOpenAI(summaryPrompt, 'en');
+      if (usedModel === 'groq') {
+        summary = await callGroq(summaryPrompt, 'en');
+      } else {
+        summary = await callOpenAI(summaryPrompt, 'en');
+      }
+    } catch (aiError) {
+      console.error(`AI (${usedModel}) call failed:`, aiError.message);
+      // Fallback to the other model
+      usedModel = usedModel === 'groq' ? 'openai' : 'groq';
+      try {
+        summary = await (usedModel === 'groq' ? callGroq : callOpenAI)(summaryPrompt, 'en');
+      } catch (fallbackError) {
+        console.error(`Fallback AI (${usedModel}) call failed:`, fallbackError.message);
+        return res.status(503).json({
+          error: 'Failed to generate summary due to AI service unavailability',
+          code: 'AI_SERVICE_ERROR',
+        });
+      }
     }
 
-    res.json({
-      summary,
+    // Validate summary output
+    if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
+      console.warn('Invalid or empty summary received:', summary);
+      summary = 'Unable to generate a meaningful summary.';
+    }
+
+    // Success response
+    return res.status(200).json({
+      summary: summary.trim(),
       messageCount: chatMessages.length,
       generatedAt: new Date().toISOString(),
-      model: 'groq' // or whichever was used
+      model: usedModel,
     });
+
   } catch (error) {
-    console.error('Summary error:', error);
-    res.status(500).json({ error: 'Failed to generate summary' });
+    // Generic error handler
+    console.error('Unexpected error in /api/summary:', {
+      message: error.message,
+      stack: error.stack,
+    });
+
+    return res.status(500).json({
+      error: 'Internal server error',
+      code: 'INTERNAL_SERVER_ERROR',
+    });
   }
+});
+
+// Error handling middleware for uncaught errors
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+  });
+  res.status(500).json({
+    error: 'Internal server error',
+    code: 'UNHANDLED_ERROR',
+  });
 });
 
 // ============== AI MODEL FUNCTIONS ==============
