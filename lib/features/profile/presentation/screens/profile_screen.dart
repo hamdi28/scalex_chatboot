@@ -368,7 +368,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           .toList();
 
       final selectedModel = chatState.selectedModel;
-      final summary = await ref.read(userSummaryProvider((userMessages, selectedModel)).future);
+      final language = context.locale.languageCode;
+
+      // Use the correct provider syntax with named parameters
+      final summary = await ref.read(userSummaryProvider((
+      messages: userMessages,
+      model: selectedModel,
+      language: language,
+      )).future);
 
       if (mounted) {
         setState(() {
@@ -394,7 +401,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
     }
   }
-
   void _showExportDialog(BuildContext context) {
     showDialog(
       context: context,

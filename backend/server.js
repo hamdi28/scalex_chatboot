@@ -294,11 +294,11 @@ app.post('/api/history', (req, res) => {
 
 // ============== UPDATED SUMMARY ENDPOINT ==============
 
-// Get user summary (AI-generated based on selected model)
+// Get user summary (AI-generated based on selected model and language)
 app.post('/api/summary', async (req, res) => {
   try {
     console.log(`📊 Summary request received`);
-    const { email, messages, model = 'gemini' } = req.body;
+    const { email, messages, model = 'gemini', language = 'en' } = req.body; // Added language parameter
 
     // Validate input
     if (!email && !messages) {
@@ -320,22 +320,32 @@ app.post('/api/summary', async (req, res) => {
 
     // Check if there are messages
     if (!chatMessages || !Array.isArray(chatMessages) || chatMessages.length === 0) {
+      const noSummaryMessage = language === 'ar'
+        ? 'لا توجد محادثات متاحة حتى الآن.'
+        : 'No chat history available yet.';
+
       return res.json({
-        summary: 'No chat history available yet.',
+        summary: noSummaryMessage,
         messageCount: 0,
-        model: model
+        model: model,
+        language: language
       });
     }
 
-    console.log(`📝 Generating summary using ${model} for ${chatMessages.length} messages`);
+    console.log(`📝 Generating summary using ${model} for ${chatMessages.length} messages in ${language}`);
 
     // Prepare messages for analysis (last 20 messages)
     const recentMessages = chatMessages.slice(-20).map(m =>
       typeof m === 'string' ? m : JSON.stringify(m)
     ).join('\n');
 
-    // Create summary prompt
-    const summaryPrompt = `Analyze these user messages and provide a brief, friendly summary of their interests and common topics in 2-3 sentences. Be concise, insightful, and positive. Focus on patterns, recurring themes, and main areas of interest.
+    // Create language-specific summary prompt
+    const summaryPrompt = language === 'ar'
+      ? `حلل هذه الرسائل من المستخدم وقدم ملخصًا موجزًا وودودًا لاهتماماته والمواضيع المشتركة في 2-3 جملة. كن موجزًا، ثاقب النظر، وإيجابيًا. ركز على الأنماط والمواضيع المتكررة والمجالات الرئيسية للاهتمام.
+
+الرسائل:
+${recentMessages}`
+      : `Analyze these user messages and provide a brief, friendly summary of their interests and common topics in 2-3 sentences. Be concise, insightful, and positive. Focus on patterns, recurring themes, and main areas of interest.
 
 Messages:
 ${recentMessages}`;
@@ -343,38 +353,38 @@ ${recentMessages}`;
     let summary;
     const startTime = Date.now();
 
-    // Generate summary using the selected AI model
+    // Generate summary using the selected AI model and language
     try {
       switch (model.toLowerCase()) {
         case 'claude':
-          summary = await callClaude(summaryPrompt, 'en');
+          summary = await callClaude(summaryPrompt, language); // Pass language
           break;
         case 'groq':
-          summary = await callGroq(summaryPrompt, 'en');
+          summary = await callGroq(summaryPrompt, language); // Pass language
           break;
-        case 'gemini':  // Added Gemini
-          summary = await callGemini(summaryPrompt, 'en');
+        case 'gemini':
+          summary = await callGemini(summaryPrompt, language); // Pass language
           break;
         default:
           // Default to Gemini if model not recognized
-          summary = await callGemini(summaryPrompt, 'en');
+          summary = await callGemini(summaryPrompt, language); // Pass language
       }
     } catch (modelError) {
       console.error(`❌ ${model} failed, trying fallback...`);
       // Fallback chain: Gemini -> Groq -> Claude -> Mock
       try {
         if (model.toLowerCase() !== 'gemini') {
-          summary = await callGemini(summaryPrompt, 'en');
+          summary = await callGemini(summaryPrompt, language);
         } else if (process.env.GROQ_API_KEY) {
-          summary = await callGroq(summaryPrompt, 'en');
+          summary = await callGroq(summaryPrompt, language);
         } else if (process.env.ANTHROPIC_API_KEY) {
-          summary = await callClaude(summaryPrompt, 'en');
+          summary = await callClaude(summaryPrompt, language);
         } else {
           throw new Error('All AI services unavailable');
         }
       } catch (fallbackError) {
-        // Generate a simple mock summary
-        summary = generateMockSummary(chatMessages);
+        // Generate a simple mock summary in the appropriate language
+        summary = generateMockSummary(chatMessages, language);
       }
     }
 
@@ -387,20 +397,26 @@ ${recentMessages}`;
       messageCount: chatMessages.length,
       generatedAt: new Date().toISOString(),
       model: model,
+      language: language,
       responseTime: `${responseTime}ms`
     });
 
   } catch (error) {
     console.error('❌ Summary generation error:', error);
+
+    const errorMessage = language === 'ar'
+      ? 'فشل في إنشاء الملخص'
+      : 'Failed to generate summary';
+
     res.status(500).json({
-      error: 'Failed to generate summary',
+      error: errorMessage,
       details: process.env.NODE_ENV === 'development' ? error.message : 'Try again later.'
     });
   }
 });
 
-// Helper function to generate a basic mock summary
-function generateMockSummary(messages) {
+// Update the mock summary function to support language
+function generateMockSummary(messages, language = 'en') {
   const messageCount = messages.length;
   const avgLength = messages.reduce((sum, msg) => sum + msg.length, 0) / messageCount;
 
@@ -409,11 +425,19 @@ function generateMockSummary(messages) {
   const keywords = ['ai', 'code', 'help', 'how', 'what', 'learn', 'app', 'data', 'work'];
   const foundKeywords = keywords.filter(kw => allText.includes(kw)).slice(0, 3);
 
-  if (foundKeywords.length > 0) {
-    return `Based on ${messageCount} messages, you've shown interest in topics related to ${foundKeywords.join(', ')}. Your messages average ${Math.round(avgLength)} characters, suggesting ${avgLength > 100 ? 'detailed' : 'concise'} communication style. You actively engage with various topics and seek information.`;
-  }
+  if (language === 'ar') {
+    if (foundKeywords.length > 0) {
+      return `بناءً على ${messageCount} رسالة، أظهرت اهتمامًا بمواضيع تتعلق بـ ${foundKeywords.join('، ')}. متوسط طول رسائلك هو ${Math.round(avgLength)} حرفًا، مما يشير إلى أسلوب تواصل ${avgLength > 100 ? 'مفصل' : 'موجز'}. أنت تشارك بنشاط في مواضيع متنوعة وتبحث عن المعلومات.`;
+    }
 
-  return `You've sent ${messageCount} messages with an average length of ${Math.round(avgLength)} characters. Your conversations cover various topics and you demonstrate active engagement with the AI assistant.`;
+    return `لقد أرسلت ${messageCount} رسالة بمتوسط طول ${Math.round(avgLength)} حرفًا. تغطي محادثاتك مواضيع متنوعة وتظهر مشاركة نشطة مع المساعد الذكي.`;
+  } else {
+    if (foundKeywords.length > 0) {
+      return `Based on ${messageCount} messages, you've shown interest in topics related to ${foundKeywords.join(', ')}. Your messages average ${Math.round(avgLength)} characters, suggesting ${avgLength > 100 ? 'detailed' : 'concise'} communication style. You actively engage with various topics and seek information.`;
+    }
+
+    return `You've sent ${messageCount} messages with an average length of ${Math.round(avgLength)} characters. Your conversations cover various topics and you demonstrate active engagement with the AI assistant.`;
+  }
 }
 
 // Error handling middleware for uncaught errors

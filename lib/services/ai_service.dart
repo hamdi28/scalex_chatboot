@@ -71,17 +71,21 @@ class AIService {
     }
   }
 
-  // NEW: Get user summary with selected AI model
+// NEW: Get user summary with selected AI model and language
   Future<String> getUserSummary({
     required List<String> messages,
     required AIModel model,
+    required String language, // Added language parameter
   }) async {
     print('\n🎯 ========== GENERATING USER SUMMARY ==========');
     print('📊 Messages count: ${messages.length}');
     print('🤖 Using model: ${model.name}');
+    print('🌐 Language: $language');
 
     if (messages.isEmpty) {
-      return 'No messages to analyze.';
+      return language == 'ar'
+          ? 'لا توجد رسائل لتحليلها.'
+          : 'No messages to analyze.';
     }
 
     try {
@@ -90,6 +94,7 @@ class AIService {
       final requestData = {
         'messages': messages,
         'model': model.name, // Send the selected model
+        'language': language, // Send the language
       };
 
       print('📤 Sending request to: $baseUrl/summary');
@@ -102,19 +107,27 @@ class AIService {
       print('📥 Response received: ${response.statusCode}');
 
       if (response.data is Map) {
-        final summary = response.data['summary'] ?? 'Unable to generate summary.';
+        final summary = response.data['summary'] ??
+            (language == 'ar' ? 'تعذر إنشاء الملخص.' : 'Unable to generate summary.');
         print('✅ Summary generated successfully');
         return summary;
       } else {
         print('⚠️ Unexpected response format');
-        return 'Unable to generate summary at this time.';
+        return language == 'ar'
+            ? 'تعذر إنشاء الملخص في الوقت الحالي.'
+            : 'Unable to generate summary at this time.';
       }
     } on DioException catch (e) {
       print('❌ DioException: ${e.message}');
-      throw Exception(handleDioError(e));
+      final errorMessage = handleDioError(e);
+      return language == 'ar'
+          ? 'خطأ في إنشاء الملخص: $errorMessage'
+          : 'Error generating summary: $errorMessage';
     } catch (e) {
       print('❌ Unexpected error: $e');
-      throw Exception('Failed to generate summary: $e');
+      return language == 'ar'
+          ? 'فشل في إنشاء الملخص: $e'
+          : 'Failed to generate summary: $e';
     } finally {
       print('🔚 Summary generation completed\n');
     }
