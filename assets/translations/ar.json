@@ -43,7 +43,8 @@
     "gpt": "OpenAI GPT",
     "claude": "Claude AI",
     "grok": "Grok AI",
-    "groq": "Meta AI"
+    "groq": "Meta AI",
+    "deepseek": "Deepseek AI"
   },
   "export_as_pdf": "تصدير كملف PDF",
   "export_as_text": "تصدير كملف نصي",

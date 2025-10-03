@@ -16,10 +16,9 @@ try {
 
 // Validate required env vars
 if (dotenvLoaded) {
-  if (!process.env.OPENAI_API_KEY) console.warn('⚠️  OPENAI_API_KEY missing. OpenAI calls will fail.');
   if (!process.env.ANTHROPIC_API_KEY) console.warn('⚠️  ANTHROPIC_API_KEY missing. Claude calls will fail.');
   if (!process.env.GROQ_API_KEY) console.warn('⚠️  GROQ_API_KEY missing. Groq calls will fail.');
-  if (!process.env.DEEPSEEK_API_KEY) console.warn('⚠️  DEEPSEEK_API_KEY missing. DeepSeek calls will fail.');
+  if (!process.env.GEMINI_API_KEY) console.warn('⚠️  GEMINI_API_KEY missing. Gemini calls will fail.');
 }
 
 const app = express();
@@ -66,9 +65,8 @@ app.get('/api/health', (req, res) => {
     message: 'ScaleX Chatbot API is running',
     timestamp: new Date().toISOString(),
     models: {
-      deepseek: process.env.DEEPSEEK_API_KEY ? 'Available' : 'Not configured',
+      gemini: process.env.GEMINI_API_KEY ? 'Available' : 'Not configured',
       groq: process.env.GROQ_API_KEY ? 'Available' : 'Not configured',
-      openai: process.env.OPENAI_API_KEY ? 'Available' : 'Not configured',
       anthropic: process.env.ANTHROPIC_API_KEY ? 'Available' : 'Not configured'
     }
   });
@@ -168,8 +166,8 @@ app.post('/api/auth/login', async (req, res) => {
 // Send message to AI
 app.post('/api/chat', async (req, res) => {
   try {
-    console.log(`💬 Chat request for model: ${req.body.model || 'deepseek'}`);
-    const { message, model = 'deepseek', language = 'en', email } = req.body;
+    console.log(`💬 Chat request for model: ${req.body.model || 'gemini'}`);
+    const { message, model = 'gemini', language = 'en', email } = req.body;
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'Message is required and must be a string' });
@@ -183,20 +181,17 @@ app.post('/api/chat', async (req, res) => {
     const startTime = Date.now();
 
     switch (model.toLowerCase()) {
-      case 'gpt':
-        aiResponse = await callOpenAI(message, language);
-        break;
       case 'claude':
         aiResponse = await callClaude(message, language);
-        break;
-      case 'deepseek':  // Replaced grok with deepseek
-        aiResponse = await callDeepSeek(message, language);
         break;
       case 'groq':
         aiResponse = await callGroq(message, language);
         break;
+      case 'gemini':  // Added Gemini
+        aiResponse = await callGemini(message, language);
+        break;
       default:
-        aiResponse = await callDeepSeek(message, language); // Default to DeepSeek
+        aiResponse = await callGemini(message, language); // Default to Gemini (free)
     }
 
     const responseTime = Date.now() - startTime;
@@ -261,7 +256,7 @@ app.get('/api/history/:email', (req, res) => {
 // Save chat message
 app.post('/api/history', (req, res) => {
   try {
-    const { email, userMessage, aiResponse, model = 'deepseek', language = 'en' } = req.body;
+    const { email, userMessage, aiResponse, model = 'gemini', language = 'en' } = req.body;
 
     if (!email || !userMessage || !aiResponse) {
       return res.status(400).json({ error: 'Email, userMessage, and aiResponse are required' });
@@ -297,16 +292,13 @@ app.post('/api/history', (req, res) => {
   }
 });
 
-
-
 // ============== UPDATED SUMMARY ENDPOINT ==============
-// Place this in your server.js, replacing the existing /api/summary endpoint
 
 // Get user summary (AI-generated based on selected model)
 app.post('/api/summary', async (req, res) => {
   try {
     console.log(`📊 Summary request received`);
-    const { email, messages, model = 'deepseek' } = req.body;
+    const { email, messages, model = 'gemini' } = req.body;
 
     // Validate input
     if (!email && !messages) {
@@ -354,32 +346,29 @@ ${recentMessages}`;
     // Generate summary using the selected AI model
     try {
       switch (model.toLowerCase()) {
-        case 'gpt':
-          summary = await callOpenAI(summaryPrompt, 'en');
-          break;
         case 'claude':
           summary = await callClaude(summaryPrompt, 'en');
           break;
         case 'groq':
           summary = await callGroq(summaryPrompt, 'en');
           break;
-        case 'deepseek':  // Replaced grok with deepseek
-          summary = await callDeepSeek(summaryPrompt, 'en');
+        case 'gemini':  // Added Gemini
+          summary = await callGemini(summaryPrompt, 'en');
           break;
         default:
-          // Default to DeepSeek if model not recognized
-          summary = await callDeepSeek(summaryPrompt, 'en');
+          // Default to Gemini if model not recognized
+          summary = await callGemini(summaryPrompt, 'en');
       }
     } catch (modelError) {
       console.error(`❌ ${model} failed, trying fallback...`);
-      // Fallback chain: DeepSeek -> Groq -> OpenAI -> Mock
+      // Fallback chain: Gemini -> Groq -> Claude -> Mock
       try {
-        if (model.toLowerCase() !== 'deepseek') {
-          summary = await callDeepSeek(summaryPrompt, 'en');
+        if (model.toLowerCase() !== 'gemini') {
+          summary = await callGemini(summaryPrompt, 'en');
         } else if (process.env.GROQ_API_KEY) {
           summary = await callGroq(summaryPrompt, 'en');
-        } else if (process.env.OPENAI_API_KEY) {
-          summary = await callOpenAI(summaryPrompt, 'en');
+        } else if (process.env.ANTHROPIC_API_KEY) {
+          summary = await callClaude(summaryPrompt, 'en');
         } else {
           throw new Error('All AI services unavailable');
         }
@@ -443,43 +432,6 @@ app.use((err, req, res, next) => {
 
 // ============== AI MODEL FUNCTIONS ==============
 
-async function callOpenAI(message, language) {
-  if (!process.env.OPENAI_API_KEY) {
-    return getMockResponse(message, language, 'OpenAI not configured');
-  }
-
-  try {
-    const systemPrompt = language === 'ar'
-      ? 'You are a helpful assistant. Respond in Arabic with clear, proper language.'
-      : 'You are a helpful assistant. Provide clear, concise responses.';
-
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: message }
-        ],
-        max_tokens: 500,
-        temperature: 0.7
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      }
-    );
-
-    return response.data.choices[0].message.content.trim();
-  } catch (error) {
-    console.error('OpenAI API Error:', error.response?.data || error.message);
-    throw new Error(`OpenAI: ${error.response?.data?.error?.message || error.message}`);
-  }
-}
-
 async function callClaude(message, language) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return getMockResponse(message, language, 'Claude not configured');
@@ -512,58 +464,6 @@ async function callClaude(message, language) {
   } catch (error) {
     console.error('Claude API Error:', error.response?.data || error.message);
     throw new Error(`Claude: ${error.response?.data?.error?.message || error.message}`);
-  }
-}
-
-async function callDeepSeek(message, language) {  // Replaced callGrok with callDeepSeek
-  if (!process.env.DEEPSEEK_API_KEY) {
-    return getMockResponse(message, language, 'DeepSeek not configured');
-  }
-
-  try {
-    const systemPrompt = language === 'ar'
-      ? 'You are a helpful assistant. Respond in Arabic with clear, proper language. Keep responses concise and helpful.'
-      : 'You are a helpful assistant. Provide clear, concise, and helpful responses.';
-
-    const response = await axios.post(
-      'https://api.deepseek.com/chat/completions',
-      {
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: message }
-        ],
-        max_tokens: 2048,
-        temperature: 0.7,
-        stream: false
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      }
-    );
-
-    if (!response.data.choices || !response.data.choices[0]) {
-      throw new Error('Invalid response format from DeepSeek API');
-    }
-
-    return response.data.choices[0].message.content.trim();
-  } catch (error) {
-    console.error('DeepSeek API Error:', error.response?.data || error.message);
-
-    // Provide more specific error messages
-    if (error.response?.status === 401) {
-      throw new Error('DeepSeek: Invalid API key');
-    } else if (error.response?.status === 429) {
-      throw new Error('DeepSeek: Rate limit exceeded');
-    } else if (error.code === 'ECONNABORTED') {
-      throw new Error('DeepSeek: Request timeout');
-    } else {
-      throw new Error(`DeepSeek: ${error.response?.data?.error?.message || error.message}`);
-    }
   }
 }
 
@@ -619,6 +519,60 @@ async function callGroq(message, language) {
   }
 }
 
+async function callGemini(message, language) {
+  if (!process.env.GEMINI_API_KEY) {
+    return getMockResponse(message, language, 'Gemini not configured');
+  }
+
+  try {
+    const systemPrompt = language === 'ar'
+      ? 'أنت مساعد مفيد. قم بالرد باللغة العربية بلغة واضحة ومناسبة.'
+      : 'You are a helpful assistant. Provide clear, concise responses.';
+
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        contents: [
+          {
+            parts: [
+              { text: `${systemPrompt}\n\nUser: ${message}` }
+            ]
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: 1000,
+          temperature: 0.7
+        }
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      }
+    );
+
+    if (response.data.candidates && response.data.candidates[0] && response.data.candidates[0].content) {
+      return response.data.candidates[0].content.parts[0].text.trim();
+    } else {
+      throw new Error('Invalid response format from Gemini API');
+    }
+  } catch (error) {
+    console.error('Gemini API Error:', error.response?.data || error.message);
+
+    // Provide specific error messages
+    if (error.response?.status === 429) {
+      throw new Error('Gemini: Rate limit exceeded - free tier allows 60 requests per minute');
+    } else if (error.response?.status === 400) {
+      throw new Error('Gemini: Bad request - check your prompt format');
+    } else if (error.response?.status === 403) {
+      throw new Error('Gemini: API key invalid or quota exceeded');
+    } else {
+      throw new Error(`Gemini: ${error.response?.data?.error?.message || error.message}`);
+    }
+  }
+}
+
 // Helper: Friendly mock responses
 function getMockResponse(message, language, reason) {
   const baseMock = `[Mock AI - ${reason}] I understand you said: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}". Configure API keys for real AI responses! ✨`;
@@ -644,11 +598,11 @@ app.post('/api/translate', async (req, res) => {
       return res.status(400).json({ error: 'Text cannot be empty' });
     }
 
-    // Use DeepSeek for translation if available
+    // Use Gemini for translation if available
     let translated;
     try {
       const translationPrompt = `Translate the following text from ${from} to ${to}. Only provide the translation, no additional text:\n\n"${text}"`;
-      translated = await callDeepSeek(translationPrompt, to);
+      translated = await callGemini(translationPrompt, to);
     } catch (error) {
       // Fallback to Groq translation
       try {
@@ -701,12 +655,26 @@ app.delete('/api/history/:email', (req, res) => {
 app.get('/api/models', (req, res) => {
   res.json({
     available_models: [
-      { id: 'deepseek', name: 'DeepSeek (Free)', status: process.env.DEEPSEEK_API_KEY ? 'available' : 'not configured' },
-      { id: 'groq', name: 'Groq (Llama 3.1)', status: process.env.GROQ_API_KEY ? 'available' : 'not configured' },
-      { id: 'gpt', name: 'OpenAI GPT-3.5', status: process.env.OPENAI_API_KEY ? 'available' : 'not configured' },
-      { id: 'claude', name: 'Claude Haiku', status: process.env.ANTHROPIC_API_KEY ? 'available' : 'not configured' }
+      {
+        id: 'gemini',
+        name: 'Google Gemini Pro',
+        status: process.env.GEMINI_API_KEY ? 'available' : 'not configured',
+        description: 'Free tier - 60 requests per minute'
+      },
+      {
+        id: 'groq',
+        name: 'Groq (Llama 3.1)',
+        status: process.env.GROQ_API_KEY ? 'available' : 'not configured',
+        description: 'Fast and efficient'
+      },
+      {
+        id: 'claude',
+        name: 'Claude Haiku',
+        status: process.env.ANTHROPIC_API_KEY ? 'available' : 'not configured',
+        description: 'Thoughtful responses'
+      }
     ],
-    default: 'deepseek'  // Changed default from groq to deepseek
+    default: 'gemini'  // Set Gemini as default (free)
   });
 });
 
@@ -734,7 +702,8 @@ app.listen(PORT, () => {
   console.log(`📍 Base URL: http://localhost:${PORT}/api`);
   console.log(`   Visit /api for endpoint list`);
   console.log(`\n⚠️  API Keys: ${dotenvLoaded ? 'Loaded ✅' : 'Missing – mocks active'}`);
-  console.log(`   DeepSeek API: ${process.env.DEEPSEEK_API_KEY ? 'Configured ✅' : 'Missing ❌'}`);
+  console.log(`   Gemini API: ${process.env.GEMINI_API_KEY ? 'Configured ✅' : 'Missing ❌'}`);
   console.log(`   Groq API: ${process.env.GROQ_API_KEY ? 'Configured ✅' : 'Missing ❌'}`);
+  console.log(`   Claude API: ${process.env.ANTHROPIC_API_KEY ? 'Configured ✅' : 'Missing ❌'}`);
   console.log(`\n🔧 Ready for testing! Use curl/Postman.\n`);
 });
