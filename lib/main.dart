@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:scalex_chatbot/features/landing/splach_screen/splash_screen.dart';
 import 'package:scalex_chatbot/features/profile/data/providers/theme_provider.dart';
 import 'package:scalex_chatbot/services/auth_service.dart';
 
@@ -57,46 +58,23 @@ class MyApp extends ConsumerWidget { // Changed from StatelessWidget to Consumer
     return MaterialApp(
       title: 'ScaleX Chatbot',
       debugShowCheckedModeBanner: false,
-
-      // Localization
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
       locale: context.locale,
-
-      // Theme
       theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme, // Fixed: was incorrectly set to lightTheme
-      themeMode: themeMode, // Now uses the dynamic themeMode from provider
-
-      // Routes
-      initialRoute: '/',
+      darkTheme: AppTheme.darkTheme,
+      themeMode: themeMode,
+      initialRoute: '/splash',
       routes: {
-        '/': (context) => const LandingWrapper(),
+        '/splash': (context) => const SplashScreen(),
+        '/': (context) => const LandingScreen(),
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignupScreen(),
         '/chat': (context) => const ChatScreen(),
         '/profile': (context) => const ProfileScreen(),
       },
     );
+
   }
 }
 
-class LandingWrapper extends StatelessWidget {
-  const LandingWrapper({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final authService = AuthService();
-
-    // Decide initial screen
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (authService.isLoggedIn) {
-        // User is logged in, navigate to chat and remove landing from stack
-        Navigator.pushReplacementNamed(context, '/chat');
-      }
-    });
-
-    // While checking, show the landing screen
-    return const LandingScreen();
-  }
-}
