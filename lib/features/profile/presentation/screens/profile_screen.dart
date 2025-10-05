@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:scalex_chatbot/features/profile/data/providers/ai_model_provider.dart';
+import 'package:scalex_chatbot/features/profile/data/providers/export_data_provider.dart';
 import 'package:scalex_chatbot/features/profile/data/providers/theme_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../chat/presentation/providers/chat_provider.dart';
@@ -189,7 +191,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       title: Text('export_history'.tr()),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () {
-                        _showExportDialog(context);
+                        _showExportDialog(context,ref);
                       },
                     ),
 
@@ -401,54 +403,199 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
     }
   }
-  void _showExportDialog(BuildContext context) {
+  void _showExportDialog(BuildContext context, WidgetRef ref) {
+    final chatState = ref.read(chatProvider);
+    final selectedModel = chatState.selectedModel;
+    final exportState = ref.watch(exportStateProvider);
+    final exportNotifier = ref.read(exportStateProvider.notifier);
+    final exportService = ref.read(exportProvider);
+    final language = context.locale.languageCode;
+
+    // Get filtered messages for the selected model
+    final filteredMessages = ref.read(filteredMessagesProvider(selectedModel.name));
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        key: const ValueKey('export_dialog'),
-        title: Text('export_history'.tr()),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              key: const ValueKey('pdf_export_tile'),
-              leading: const Icon(Icons.picture_as_pdf),
-              title: Text('export_as_pdf'.tr()),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(context.locale.languageCode == 'ar'
-                        ? 'سيتم إضافة هذه الميزة قريباً'
-                        : 'Feature coming soon'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            key: const ValueKey('export_dialog'),
+            title: Text('export_history'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (exportState.isExporting) ...[
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(
+                    language == 'ar' ? 'جاري التصدير...' : 'Exporting...',
+                    textAlign: TextAlign.center,
                   ),
-                );
-              },
-            ),
-            ListTile(
-              key: const ValueKey('text_export_tile'),
-              leading: const Icon(Icons.text_snippet),
-              title: Text('export_as_text'.tr()),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(context.locale.languageCode == 'ar'
-                        ? 'سيتم إضافة هذه الميزة قريباً'
-                        : 'Feature coming soon'),
+                ] else if (exportState.exportPath != null) ...[
+                  const Icon(Icons.check_circle, color: Colors.green, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    language == 'ar' ? 'تم التصدير بنجاح!' : 'Export successful!',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                );
-              },
+                  const SizedBox(height: 8),
+                  FutureBuilder<String>(
+                    future: exportService.getFileSize(exportState.exportPath!),
+                    builder: (context, snapshot) {
+                      return Text(
+                        snapshot.hasData
+                            ? '${language == 'ar' ? 'حجم الملف' : 'File size'}: ${snapshot.data}'
+                            : '',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  FutureBuilder<String>(
+                    future: exportService.getFileLocation(exportState.exportPath!),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        return Text(
+                          '${language == 'ar' ? 'المكان' : 'Location'}: ${snapshot.data}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                          textAlign: TextAlign.center,
+                        );
+                      }
+                      return const SizedBox();
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      try {
+                        await exportService.shareFile(
+                            exportState.exportPath!,
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Share failed: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.share),
+                    label: Text(language == 'ar' ? 'مشاركة' : 'Share'),
+                  ),
+                ] else if (exportState.error != null) ...[
+                  const Icon(Icons.error, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    exportState.error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ] else ...[
+                  Text(
+                    language == 'ar'
+                        ? 'اختر طريقة التصدير لـ ${selectedModel.displayName}'
+                        : 'Choose export method for ${selectedModel.displayName}',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '${language == 'ar' ? 'عدد الرسائل' : 'Messages'}: ${filteredMessages.length}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // PDF Export
+                  ListTile(
+                    key: const ValueKey('pdf_export_tile'),
+                    leading: const Icon(Icons.picture_as_pdf),
+                    title: Text('export_as_pdf'.tr()),
+                    subtitle: Text(
+                      language == 'ar' ? 'سيتم حفظ الملف تلقائياً' : 'File will be auto-saved',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    onTap: () async {
+                      exportNotifier.startExporting();
+
+                      try {
+                        final filePath = await exportService.exportAsPdf(filteredMessages, language);
+                        exportNotifier.exportSuccess(filePath);
+                        // Auto-download completed - file is already saved
+                      } catch (e) {
+                        exportNotifier.exportError(e.toString());
+                      } finally {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              context.locale.languageCode == 'ar'
+                                  ? 'تم إنشاء ملف PDF بنجاح وحفظه في مجلد التنزيلات (/Downloads)'
+                                  : 'PDF generated successfully and saved under /Downloads',
+                            ),
+                            duration: const Duration(seconds: 3),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+
+                  // Text Export
+                  ListTile(
+                    key: const ValueKey('text_export_tile'),
+                    leading: const Icon(Icons.text_snippet),
+                    title: Text('export_as_text'.tr()),
+                    subtitle: Text(
+                      language == 'ar' ? 'سيتم حفظ الملف تلقائياً' : 'File will be auto-saved',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    onTap: () async {
+                      exportNotifier.startExporting();
+
+                      try {
+                        final filePath = await exportService.exportAsText(filteredMessages, language);
+                        exportNotifier.exportSuccess(filePath);
+                        // Auto-download completed - file is already saved
+                      } catch (e) {
+                        exportNotifier.exportError(e.toString());
+                      } finally {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              context.locale.languageCode == 'ar'
+                                  ? 'تم إنشاء ملف TXT بنجاح وحفظه في مجلد التنزيلات (/Downloads)'
+                                  : 'TXT generated successfully and saved under /Downloads',
+                            ),
+                            duration: const Duration(seconds: 3),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+
+                      }
+                    },
+                  ),
+                ],
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            key: const ValueKey('cancel_export_button'),
-            onPressed: () => Navigator.pop(context),
-            child: Text('cancel'.tr()),
-          ),
-        ],
+            actions: [
+              if (exportState.exportPath != null || exportState.error != null) ...[
+                TextButton(
+                  onPressed: () {
+                    exportNotifier.reset();
+                    Navigator.pop(context);
+                  },
+                  child: Text('close'.tr()),
+                ),
+              ] else if (!exportState.isExporting) ...[
+                TextButton(
+                  key: const ValueKey('cancel_export_button'),
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('cancel'.tr()),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }

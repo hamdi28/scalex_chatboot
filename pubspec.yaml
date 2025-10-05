@@ -60,6 +60,10 @@ dev_dependencies:
   hive_generator: ^2.0.1
   retrofit_generator: ^8.0.4
   json_serializable: ^6.7.1
+  share_plus: ^7.0.1
+  path_provider: ^2.1.1
+  pdf: ^3.10.4
+  printing: ^5.11.2
   change_app_package_name: ^1.1.0
 
 flutter:
@@ -74,4 +78,8 @@ flutter:
       fonts:
         - asset: assets/fonts/Cairo-Regular.ttf
         - asset: assets/fonts/Cairo-Bold.ttf
+        - asset: assets/fonts/Amiri-Regular.ttf
+        - asset: assets/fonts/Amiri-Bold.ttf
+        - asset: assets/fonts/DejaVuSans.ttf
+        - asset: assets/fonts/DejaVuSans-Bold.ttf
           weight: 700
