@@ -56,5 +56,8 @@
   "no_messages": "لا توجد رسائل بعد. ابدأ محادثة!",
   "copied": "تم النسخ",
   "close": "أغلق",
+  "voice_error": "Voice recognition error",
+  "microphone_permission_required": "Microphone permission required",
+  "speech_not_available": "Speech recognition not available",
   "theme": "المظهر"
 }

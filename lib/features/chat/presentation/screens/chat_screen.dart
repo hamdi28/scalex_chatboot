@@ -7,6 +7,9 @@ import '../providers/chat_provider.dart';
 import '../widgets/message_bubble.dart';
 import '../../../../services/ai_service.dart';
 import 'dart:ui' as ui;
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:permission_handler/permission_handler.dart';
+
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({Key? key}) : super(key: key);
 
@@ -18,10 +21,88 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  // Voice input
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+  bool _speechAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  // Initialize speech recognition
+  Future<void> _initSpeech() async {
+    _speech = stt.SpeechToText();
+    try {
+      _speechAvailable = await _speech.initialize(
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            setState(() => _isListening = false);
+          }
+        },
+        onError: (error) {
+          print('Speech error: $error');
+          setState(() => _isListening = false);
+          _showError('voice_error'.tr());
+        },
+      );
+    } catch (e) {
+      print('Speech initialization error: $e');
+      _speechAvailable = false;
+    }
+  }
+
+  // Start listening
+  Future<void> _startListening() async {
+    // Check microphone permission
+    final status = await Permission.microphone.request();
+    if (!status.isGranted) {
+      _showError('microphone_permission_required'.tr());
+      return;
+    }
+
+    if (!_speechAvailable) {
+      _showError('speech_not_available'.tr());
+      return;
+    }
+
+    // Get current locale for speech recognition
+    final locale = context.locale.languageCode;
+    final localeId = locale == 'ar' ? 'ar_SA' : 'en_US';
+
+    setState(() => _isListening = true);
+
+    await _speech.listen(
+      onResult: (result) {
+        setState(() {
+          _controller.text = result.recognizedWords;
+        });
+      },
+      localeId: localeId,
+      listenMode: stt.ListenMode.confirmation,
+      cancelOnError: true,
+    );
+  }
+
+  // Stop listening
+  Future<void> _stopListening() async {
+    await _speech.stop();
+    setState(() => _isListening = false);
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
+    _speech.stop();
     super.dispose();
   }
 
@@ -29,7 +110,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatProvider);
     final isRTL = context.locale.languageCode == 'ar';
-    List<Message> messageFromAi = chatState.messages.where((element) => element.aiModel == ref.read(chatProvider.notifier).state.selectedModel.name).toList();
+    List<Message> messageFromAi = chatState.messages
+        .where((element) =>
+    element.aiModel == ref.read(chatProvider.notifier).state.selectedModel.name)
+        .toList();
 
     return Directionality(
       textDirection: isRTL ? ui.TextDirection.rtl : ui.TextDirection.ltr,
@@ -56,12 +140,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   ),
                   DropdownMenuItem(
-                    value: AIModel.gemini,  // Replaced grok with deepseek
+                    value: AIModel.gemini,
                     child: Row(
                       children: [
                         const Icon(Icons.smart_toy, size: 16),
                         const SizedBox(width: 8),
-                        Text('ai_models.gimini'.tr()),  // Updated translation key
+                        Text('ai_models.gimini'.tr()),
                       ],
                     ),
                   ),
@@ -149,6 +233,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
               ),
 
+            // Listening Indicator
+            if (_isListening)
+              Container(
+                padding: const EdgeInsets.all(12),
+                color: Colors.red.withOpacity(0.1),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.mic, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'listening'.tr(),
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Input Area
             _buildInputArea(isRTL),
           ],
@@ -172,6 +286,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       child: Row(
         children: [
+          // Voice Input Button
+          Container(
+            decoration: BoxDecoration(
+              color: _isListening
+                  ? Colors.red
+                  : Theme.of(context).primaryColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(
+                _isListening ? Icons.mic : Icons.mic_none,
+                color: _isListening
+                    ? Colors.white
+                    : Theme.of(context).primaryColor,
+              ),
+              onPressed: _isListening ? _stopListening : _startListening,
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Text Input
           Expanded(
             child: TextField(
               controller: _controller,

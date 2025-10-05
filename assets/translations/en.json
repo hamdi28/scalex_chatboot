@@ -56,6 +56,9 @@
   "member_since": "Member since",
   "ai_analysis": "AI Analysis",
   "close": "close",
+  "voice_error": "Voice recognition error",
+  "microphone_permission_required": "Microphone permission required",
+  "speech_not_available": "Speech recognition not available",
   "no_messages": "No messages yet. Start a conversation!",
   "copied": "Copied to clipboard"
 }
