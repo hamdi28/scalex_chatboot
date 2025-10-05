@@ -59,5 +59,6 @@
   "voice_error": "Voice recognition error",
   "microphone_permission_required": "Microphone permission required",
   "speech_not_available": "Speech recognition not available",
+  "is_required": "مطلوب",
   "theme": "المظهر"
 }

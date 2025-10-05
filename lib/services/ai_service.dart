@@ -5,9 +5,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:scalex_chatbot/features/profile/data/providers/ai_model_provider.dart';
 
+/// Service class for interacting with AI backend APIs using Dio.
 class AIService {
   final Dio _dio;
 
+  /// Initializes the service with a configured Dio instance.
   AIService(this._dio) {
     _dio.options = BaseOptions(
       connectTimeout: const Duration(seconds: 30),
@@ -16,6 +18,7 @@ class AIService {
       headers: {'Content-Type': 'application/json'},
     );
 
+    // LogInterceptor removed prints, can be customized if needed
     _dio.interceptors.add(LogInterceptor(
       request: true,
       requestHeader: true,
@@ -23,18 +26,16 @@ class AIService {
       responseHeader: true,
       responseBody: true,
       error: true,
-      logPrint: (object) => print('🌐 DIO: $object'),
+      logPrint: (_) {}, // Suppress default print logs
     ));
   }
 
+  /// Sends a message to the AI backend and returns the AI response.
   Future<String> sendMessage({
     required String message,
     required String language,
     required AIModel model,
   }) async {
-    print('\n🚀 ========== START SEND MESSAGE ==========');
-    print('📤 Input parameters: message="$message", language=$language, model=$model');
-
     try {
       final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
       final requestData = {
@@ -59,29 +60,20 @@ class AIService {
         result = 'Unexpected response format: ${response.data.runtimeType}';
       }
 
-      print('🎯 Final result: "$result"');
       return result;
     } on DioException catch (e) {
       return handleDioError(e);
     } catch (e) {
-      print('🚨 Unexpected error: $e');
       throw Exception('Unexpected error: $e');
-    } finally {
-      print('🔚 SendMessage execution completed\n');
     }
   }
 
-// NEW: Get user summary with selected AI model and language
+  /// Generates a user summary from provided [messages] using the selected [model] and [language].
   Future<String> getUserSummary({
     required List<String> messages,
     required AIModel model,
-    required String language, // Added language parameter
+    required String language,
   }) async {
-    print('\n🎯 ========== GENERATING USER SUMMARY ==========');
-    print('📊 Messages count: ${messages.length}');
-    print('🤖 Using model: ${model.name}');
-    print('🌐 Language: $language');
-
     if (messages.isEmpty) {
       return language == 'ar'
           ? 'لا توجد رسائل لتحليلها.'
@@ -90,64 +82,50 @@ class AIService {
 
     try {
       final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
-
       final requestData = {
         'messages': messages,
-        'model': model.name, // Send the selected model
-        'language': language, // Send the language
+        'model': model.name,
+        'language': language,
       };
 
-      print('📤 Sending request to: $baseUrl/summary');
-
-      final response = await _dio.post(
-        '$baseUrl/summary',
-        data: requestData,
-      );
-
-      print('📥 Response received: ${response.statusCode}');
+      final response = await _dio.post('$baseUrl/summary', data: requestData);
 
       if (response.data is Map) {
         final summary = response.data['summary'] ??
             (language == 'ar' ? 'تعذر إنشاء الملخص.' : 'Unable to generate summary.');
-        print('✅ Summary generated successfully');
         return summary;
       } else {
-        print('⚠️ Unexpected response format');
         return language == 'ar'
             ? 'تعذر إنشاء الملخص في الوقت الحالي.'
             : 'Unable to generate summary at this time.';
       }
     } on DioException catch (e) {
-      print('❌ DioException: ${e.message}');
       final errorMessage = handleDioError(e);
       return language == 'ar'
           ? 'خطأ في إنشاء الملخص: $errorMessage'
           : 'Error generating summary: $errorMessage';
     } catch (e) {
-      print('❌ Unexpected error: $e');
       return language == 'ar'
           ? 'فشل في إنشاء الملخص: $e'
           : 'Failed to generate summary: $e';
-    } finally {
-      print('🔚 Summary generation completed\n');
     }
   }
 
+  /// Tests if the AI backend is reachable.
   Future<bool> testConnection() async {
     try {
       final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
-      final response = await _dio.get(
+      await _dio.get(
         '$baseUrl/health',
         options: Options(receiveTimeout: const Duration(seconds: 10)),
       );
       return true;
-    } on DioException catch (_) {
-      return false;
     } catch (_) {
       return false;
     }
   }
 
+  /// Translates [text] from [fromLang] to [toLang]. Returns original text if languages are the same.
   Future<String> translateText({
     required String text,
     required String fromLang,
@@ -167,6 +145,7 @@ class AIService {
     }
   }
 
+  /// Retrieves chat history for the user identified by [email].
   Future<List<dynamic>> getChatHistory(String email) async {
     try {
       final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
@@ -180,6 +159,7 @@ class AIService {
     }
   }
 
+  /// Saves a chat message for the user.
   Future<bool> saveChatMessage({
     required String email,
     required String userMessage,
@@ -192,7 +172,7 @@ class AIService {
         'email': email,
         'userMessage': userMessage,
         'aiResponse': aiResponse,
-        'model': 'gemini', // Changed from 'deepseek' to 'gemini'
+        'model': 'gemini',
         'language': language,
       });
       return true;
@@ -201,6 +181,7 @@ class AIService {
     }
   }
 
+  /// Checks server health and returns the response as a map.
   Future<Map<String, dynamic>> checkHealth() async {
     try {
       final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
@@ -215,11 +196,12 @@ class AIService {
     }
   }
 
+  /// Returns a list of available AI models.
   Future<Map<String, dynamic>> getAvailableModels() async {
     return {
       'available_models': [
         {
-          'id': 'gemini', // Replaced 'deepseek' with 'gemini'
+          'id': 'gemini',
           'name': 'Google Gemini (Free)',
           'status': 'available',
           'description': 'Free tier - 60 requests per minute'
@@ -237,10 +219,11 @@ class AIService {
           'description': 'Thoughtful and detailed responses'
         }
       ],
-      'default': 'gemini' // Changed default from 'deepseek' to 'gemini'
+      'default': 'gemini'
     };
   }
 
+  /// Handles Dio exceptions and returns a user-friendly error message.
   String handleDioError(DioException e) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
@@ -253,7 +236,7 @@ class AIService {
         return 'SSL certificate error.';
       case DioExceptionType.badResponse:
         if (e.response?.statusCode == 401) {
-          return 'API key error. Please check your AI service configuration.'; // Updated to generic message
+          return 'API key error. Please check your AI service configuration.';
         }
         if (e.response?.statusCode == 429) {
           return 'Rate limit exceeded. Please try again later.';

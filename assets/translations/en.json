@@ -60,5 +60,7 @@
   "microphone_permission_required": "Microphone permission required",
   "speech_not_available": "Speech recognition not available",
   "no_messages": "No messages yet. Start a conversation!",
+  "error_field_required": "{field} is required",
+  "is_required": "is required",
   "copied": "Copied to clipboard"
 }

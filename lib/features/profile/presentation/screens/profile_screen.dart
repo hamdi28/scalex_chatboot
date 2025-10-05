@@ -519,23 +519,37 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       exportNotifier.startExporting();
 
                       try {
+                        // Attempt to export PDF
                         final filePath = await exportService.exportAsPdf(filteredMessages, language);
+
+                        // Update state to success
                         exportNotifier.exportSuccess(filePath);
-                        // Auto-download completed - file is already saved
+
+                        // Close the current dialog / loading screen
+                        if (mounted) Navigator.pop(context);
+
+                        // File is already saved automatically
                       } catch (e) {
+                        // Close dialog if open
+                        if (mounted) Navigator.pop(context);
+
+                        // Update state with error
                         exportNotifier.exportError(e.toString());
                       } finally {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              context.locale.languageCode == 'ar'
-                                  ? 'تم إنشاء ملف PDF بنجاح وحفظه في مجلد التنزيلات (/Downloads)'
-                                  : 'PDF generated successfully and saved under /Downloads',
+                        // Show a SnackBar regardless of success or failure
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                context.locale.languageCode == 'ar'
+                                    ? 'تم إنشاء ملف PDF بنجاح وحفظه في مجلد التنزيلات (/Downloads)'
+                                    : 'PDF generated successfully and saved under /Downloads',
+                              ),
+                              duration: const Duration(seconds: 3),
+                              behavior: SnackBarBehavior.floating,
                             ),
-                            duration: const Duration(seconds: 3),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
+                          );
+                        }
                       }
                     },
                   ),
@@ -553,25 +567,39 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       exportNotifier.startExporting();
 
                       try {
+                        // Attempt to export as TXT
                         final filePath = await exportService.exportAsText(filteredMessages, language);
+
+                        // Update state to success
                         exportNotifier.exportSuccess(filePath);
-                        // Auto-download completed - file is already saved
+
+                        // Close the dialog / loading screen if widget is still mounted
+                        if (mounted) Navigator.pop(context);
+
+                        // File is already saved automatically
                       } catch (e) {
+                        // Close dialog if open
+                        if (mounted) Navigator.pop(context);
+
+                        // Update state with error
                         exportNotifier.exportError(e.toString());
                       } finally {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              context.locale.languageCode == 'ar'
-                                  ? 'تم إنشاء ملف TXT بنجاح وحفظه في مجلد التنزيلات (/Downloads)'
-                                  : 'TXT generated successfully and saved under /Downloads',
+                        // Show a SnackBar regardless of success or failure
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                context.locale.languageCode == 'ar'
+                                    ? 'تم إنشاء ملف TXT بنجاح وحفظه في مجلد التنزيلات (/Downloads)'
+                                    : 'TXT generated successfully and saved under /Downloads',
+                              ),
+                              duration: const Duration(seconds: 3),
+                              behavior: SnackBarBehavior.floating,
                             ),
-                            duration: const Duration(seconds: 3),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-
+                          );
+                        }
                       }
+
                     },
                   ),
                 ],

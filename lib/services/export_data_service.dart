@@ -7,40 +7,34 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:permission_handler/permission_handler.dart';
 
+/// Service class for exporting chat messages as PDF or text files and sharing them.
 class ExportService {
   pw.Font? _arabicFont;
   pw.Font? _englishFont;
   bool _isProcessing = false;
 
+  /// Indicates whether an export operation is in progress.
   bool get isProcessing => _isProcessing;
 
-  // Request storage permissions (IMPORTANT for accessing Downloads)
+  /// Requests storage permissions on Android devices.
   Future<bool> _requestPermissions() async {
     if (Platform.isAndroid) {
-      // Check Android version
       var status = await Permission.storage.status;
-      if (status.isGranted) {
-        return true;
-      }
+      if (status.isGranted) return true;
 
-      // Request permission
       status = await Permission.storage.request();
-      if (status.isGranted) {
-        return true;
-      }
+      if (status.isGranted) return true;
 
-      // For Android 13+ (API 33+), try manageExternalStorage
       if (status.isPermanentlyDenied) {
         await openAppSettings();
         return false;
       }
-
       return status.isGranted;
     }
-    return true; // iOS doesn't need these permissions
+    return true; // iOS does not require these permissions
   }
 
-  // Initialize fonts (simplified)
+  /// Initializes the Arabic and English fonts for PDF export.
   Future<void> _initializeFonts() async {
     if (_arabicFont != null && _englishFont != null) return;
 
@@ -50,72 +44,47 @@ class ExportService {
 
       final englishFontData = await rootBundle.load('assets/fonts/DejaVuSans.ttf');
       _englishFont = pw.Font.ttf(englishFontData);
-    } catch (e) {
-      print('Error loading fonts: $e');
-      // Use built-in fonts as fallback
+    } catch (_) {
       _arabicFont = pw.Font.helvetica();
       _englishFont = pw.Font.helvetica();
     }
   }
 
-  // Get PUBLIC Downloads directory that user can easily access
+  /// Returns a public directory suitable for saving files.
   Future<Directory> _getPublicDirectory() async {
     try {
       if (Platform.isAndroid) {
-        // DIRECTLY use the public Downloads folder (no subfolder)
-        final downloadsPath = '/storage/emulated/0/Download';
-        final downloadsDir = Directory(downloadsPath);
+        final downloadsDir = Directory('/storage/emulated/0/Download');
+        if (await downloadsDir.exists()) return downloadsDir;
 
-        // Check if Downloads exists
-        if (await downloadsDir.exists()) {
-          return downloadsDir;
-        }
+        final altDownloadsDir = Directory('/storage/emulated/0/Downloads');
+        if (await altDownloadsDir.exists()) return altDownloadsDir;
 
-        // Alternative Downloads path
-        final altDownloadsPath = '/storage/emulated/0/Downloads';
-        final altDownloadsDir = Directory(altDownloadsPath);
-        if (await altDownloadsDir.exists()) {
-          return altDownloadsDir;
-        }
-
-        // Fallback: try Documents folder
-        final documentsPath = '/storage/emulated/0/Documents';
-        final documentsDir = Directory(documentsPath);
-        if (await documentsDir.exists()) {
-          return documentsDir;
-        }
+        final documentsDir = Directory('/storage/emulated/0/Documents');
+        if (await documentsDir.exists()) return documentsDir;
       }
-
-      // iOS or fallback: use app documents directory
       return await getApplicationDocumentsDirectory();
-    } catch (e) {
-      print('Error getting public directory: $e');
-      // Last fallback
+    } catch (_) {
       return await getApplicationDocumentsDirectory();
     }
   }
 
-  // Export as PDF (with public storage)
+  /// Exports [messages] as a PDF file in the specified [language].
   Future<String> exportAsPdf(List<Message> messages, String language) async {
-    if (_isProcessing) {
-      throw Exception('Another export is already in progress');
-    }
-
+    if (_isProcessing) throw Exception('Another export is already in progress');
     _isProcessing = true;
+
     try {
-      // Request permissions first
       final hasPermission = await _requestPermissions();
       if (!hasPermission && Platform.isAndroid) {
         throw Exception('Storage permission is required to save files');
       }
 
       await _initializeFonts();
-
       final pdf = pw.Document();
       final isArabic = language == 'ar';
 
-      // Add pages (split if needed)
-      final chunks = _chunkMessages(messages, 15); // 15 messages per page
+      final chunks = _chunkMessages(messages, 15);
 
       for (final chunk in chunks) {
         pdf.addPage(
@@ -127,7 +96,6 @@ class ExportService {
         );
       }
 
-      // Save to PUBLIC directory
       final directory = await _getPublicDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'ChatExport_$timestamp.pdf';
@@ -136,22 +104,19 @@ class ExportService {
       final bytes = await pdf.save();
       await file.writeAsBytes(bytes);
 
-      // Make sure file is readable by other apps
       if (Platform.isAndroid) {
         await Process.run('chmod', ['644', file.path]);
       }
 
-      print('PDF saved to: ${file.path}');
       return file.path;
     } catch (e) {
-      print('PDF export error: $e');
       throw Exception('Failed to export PDF: ${e.toString()}');
     } finally {
       _isProcessing = false;
     }
   }
 
-  // Chunk messages for pagination
+  /// Chunks messages into smaller lists of [chunkSize] for pagination.
   List<List<Message>> _chunkMessages(List<Message> messages, int chunkSize) {
     final chunks = <List<Message>>[];
     for (var i = 0; i < messages.length; i += chunkSize) {
@@ -161,12 +126,11 @@ class ExportService {
     return chunks;
   }
 
-  // Build PDF content (simplified)
+  /// Builds PDF content for a list of [messages].
   pw.Widget _buildPdfContent(List<Message> messages, bool isArabic) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        // Header
         pw.Text(
           isArabic ? 'Chat Export' : 'Chat Export',
           style: pw.TextStyle(
@@ -178,14 +142,12 @@ class ExportService {
         pw.SizedBox(height: 10),
         pw.Divider(),
         pw.SizedBox(height: 10),
-
-        // Messages
         ...messages.map((message) => _buildMessageWidget(message, isArabic)).toList(),
       ],
     );
   }
 
-  // Build single message widget
+  /// Builds a PDF widget for a single [message].
   pw.Widget _buildMessageWidget(Message message, bool isArabic) {
     final sender = message.isUser ? 'You' : 'Assistant';
     final bgColor = message.isUser ? PdfColors.blue50 : PdfColors.grey100;
@@ -233,15 +195,12 @@ class ExportService {
     );
   }
 
-  // Export as text file (with public storage)
+  /// Exports [messages] as a text file in the specified [language].
   Future<String> exportAsText(List<Message> messages, String language) async {
-    if (_isProcessing) {
-      throw Exception('Another export is already in progress');
-    }
-
+    if (_isProcessing) throw Exception('Another export is already in progress');
     _isProcessing = true;
+
     try {
-      // Request permissions first
       final hasPermission = await _requestPermissions();
       if (!hasPermission && Platform.isAndroid) {
         throw Exception('Storage permission is required to save files');
@@ -255,26 +214,21 @@ class ExportService {
 
       await file.writeAsString(content);
 
-      // Make sure file is readable by other apps
       if (Platform.isAndroid) {
         await Process.run('chmod', ['644', file.path]);
       }
 
-      print('Text file saved to: ${file.path}');
       return file.path;
     } catch (e) {
-      print('Text export error: $e');
       throw Exception('Failed to export text: ${e.toString()}');
     } finally {
       _isProcessing = false;
     }
   }
 
-  // Format messages as text
+  /// Formats [messages] as plain text for export.
   String _formatMessagesAsText(List<Message> messages, String language) {
-    final isArabic = language == 'ar';
     final buffer = StringBuffer();
-
     buffer.writeln('CHAT EXPORT');
     buffer.writeln('Generated: ${DateTime.now()}');
     buffer.writeln('Total Messages: ${messages.length}');
@@ -299,82 +253,66 @@ class ExportService {
     return buffer.toString();
   }
 
-  // Share file with proper content URI for Android
+  /// Shares a file at [filePath] using the system share dialog.
   Future<void> shareFile(String filePath) async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        throw Exception('File not found at: $filePath');
-      }
-
-      // Verify file is readable
-      final bytes = await file.readAsBytes();
-      if (bytes.isEmpty) {
-        throw Exception('File is empty');
-      }
-
-      print('Sharing file: $filePath (${bytes.length} bytes)');
-
-      // Use XFile with explicit mime type
-      final xFile = XFile(
-        filePath,
-        mimeType: filePath.endsWith('.pdf')
-            ? 'application/pdf'
-            : 'text/plain',
-      );
-
-      await Share.shareXFiles(
-        [xFile],
-        subject: 'Chat Export',
-        text: 'Sharing my chat export',
-      );
-    } catch (e) {
-      print('Share error: $e');
-      throw Exception('Failed to share file: ${e.toString()}');
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception('File not found at: $filePath');
     }
+
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) {
+      throw Exception('File is empty');
+    }
+
+    final xFile = XFile(
+      filePath,
+      mimeType: filePath.endsWith('.pdf') ? 'application/pdf' : 'text/plain',
+    );
+
+    await Share.shareXFiles(
+      [xFile],
+      subject: 'Chat Export',
+      text: 'Sharing my chat export',
+    );
   }
 
-  // Utility: Check if text contains Arabic
+  /// Checks if [text] contains Arabic characters.
   bool _containsArabic(String text) {
     return RegExp(r'[\u0600-\u06FF]').hasMatch(text);
   }
 
-  // Utility: Format timestamp
+  /// Formats [dateTime] to a human-readable string.
   String _formatTime(DateTime dateTime) {
     final local = dateTime.toLocal();
     return '${local.day}/${local.month}/${local.year} ${local.hour}:${local.minute.toString().padLeft(2, '0')}';
   }
 
-  // Get file info
+  /// Returns the size of a file at [filePath] in KB or MB.
   Future<String> getFileSize(String filePath) async {
     try {
       final file = File(filePath);
       final bytes = await file.length();
       final kb = bytes / 1024;
-
-      if (kb < 1024) {
-        return '${kb.toStringAsFixed(1)} KB';
-      } else {
-        return '${(kb / 1024).toStringAsFixed(1)} MB';
-      }
-    } catch (e) {
+      if (kb < 1024) return '${kb.toStringAsFixed(1)} KB';
+      return '${(kb / 1024).toStringAsFixed(1)} MB';
+    } catch (_) {
       return 'Unknown';
     }
   }
 
+  /// Returns the parent directory of the file at [filePath].
   Future<String> getFileLocation(String filePath) async {
     try {
       return File(filePath).parent.path;
-    } catch (e) {
+    } catch (_) {
       return 'Unknown';
     }
   }
 
-  // Helper method to get user-friendly location description
+  /// Returns a user-friendly name for the default file location.
   String getFriendlyLocation() {
-    if (Platform.isAndroid) {
-      return 'Download';
-    }
+    if (Platform.isAndroid) return 'Download';
     return 'Documents';
   }
 }
