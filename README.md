@@ -329,9 +329,8 @@ Please report issues with:
 We'd love to hear your ideas! Suggest features that would make the app more useful for you.
 
 ### Contact
-- **Email**: your.email@example.com
-- **GitHub**: [@yourusername](https://github.com/yourusername)
-- **LinkedIn**: [Your Profile](https://linkedin.com/in/yourprofile)
+- **Email**: hamdichalbi28@gmail.com
+- **LinkedIn**: [Your Profile](https://www.linkedin.com/in/hamdi-chalbi/)
 
 ---
 
