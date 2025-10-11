@@ -11,9 +11,8 @@ A cross-platform AI-powered mobile chatbot application built with Flutter, featu
 
 ## 📱 Download & Test
 
-### 🔗 **[Download APK from Google Drive](https://drive.google.com/file/d/YOUR_FILE_ID_HERE/view?usp=sharing)**
+### 🔗 **[Download APK from Google Drive](https://drive.google.com/file/d/11ZBYpsEccF89jgQVAwf1sPPaFReYQj50/view?usp=sharing)**
 
-> **Note:** Replace `YOUR_FILE_ID_HERE` with your actual Google Drive file ID after uploading the APK.
 
 ### System Requirements
 - **Android**: 5.0 (API Level 21) or higher
