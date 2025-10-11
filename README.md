@@ -330,7 +330,7 @@ We'd love to hear your ideas! Suggest features that would make the app more usef
 
 ### Contact
 - **Email**: hamdichalbi28@gmail.com
-- **LinkedIn**: [Your Profile](https://www.linkedin.com/in/hamdi-chalbi/)
+- **LinkedIn**: [Hamdi chalbi](https://www.linkedin.com/in/hamdi-chalbi/)
 
 ---
 
