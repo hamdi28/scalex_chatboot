@@ -191,16 +191,6 @@ A cross-platform AI-powered mobile chatbot application built with Flutter, featu
 
 ---
 
-## 📸 Screenshots
-
-| Landing Screen | Chat Interface | Profile Screen |
-|----------------|----------------|----------------|
-| ![Landing](screenshots/landing.png) | ![Chat](screenshots/chat.png) | ![Profile](screenshots/profile.png) |
-
-> **Note:** Add your actual screenshots to the `screenshots/` folder
-
----
-
 ## 🎯 Use Cases
 
 ### For Students
