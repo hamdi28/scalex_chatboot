@@ -376,11 +376,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🚀 Quick Links
 
-- 📱 [Download APK](https://drive.google.com/file/d/YOUR_FILE_ID_HERE/view?usp=sharing)
-- 📹 [Video Demo](https://youtube.com/your-demo-video)
-- 💻 [Source Code](https://github.com/yourusername/scalex-chatbot)
-- 📚 [Documentation](docs/)
-- 🐛 [Report Issues](https://github.com/yourusername/scalex-chatbot/issues)
+- 📱 [Download APK](https://drive.google.com/file/d/11ZBYpsEccF89jgQVAwf1sPPaFReYQj50/view?usp=sharing)
 
 ---
 
